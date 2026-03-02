@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#e6f3ff">
+<title>피카츄 배구 (Ready/Go + 사운드 + 고정 서브 + 느리게 + 전체화면)</title>
+<style>
+  :root{
+    --bg:#e6f3ff; --court:#f3d39a; --net:#ffffff; --text:#111827;
+    --pika:#ffd235; --cheek:#ff5e5e; --ear:#2b2b2b;
+    --ui:#ffffffcc; --accent:#2563eb; --secondary:#475569;
+  }
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);overflow:hidden}
+  body{font-family:system-ui,Apple SD Gothic Neo,Pretendard,sans-serif;color:var(--text)}
+  #game{position:fixed;inset:0;background:var(--bg)}
+  #canvas{
+    position:absolute; inset:0;
+    width:100vw; height:100vh;
+    display:block;
+  }
+  #hud{
+    position:absolute;
+    top: calc(10px + env(safe-area-inset-top));
+    left:50%; transform:translateX(-50%);
+    width: min(1100px, calc(100vw - 20px));
+    display:flex; flex-direction:column; gap:.5rem;
+    background:var(--ui); backdrop-filter:blur(6px);
+    padding:.6rem .75rem; border-radius:12px;
+    z-index:10;
+    box-shadow:0 6px 18px #00000022;
+  }
+  .row{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+  .scoreboard{display:flex;align-items:center;gap:.8rem;white-space:nowrap}
+  .score{font-weight:900;font-size:1.65rem}
+  .goal-pill{display:inline-flex;align-items:center;gap:.35rem;background:#0f172acc;color:#fff;border-radius:999px;padding:.25rem .6rem;font-weight:800;white-space:nowrap}
+  .controls{display:flex;flex-wrap:wrap;gap:.4rem}
+  button{border:none;padding:.5rem .75rem;border-radius:10px;background:var(--accent);color:#fff;font-weight:900;cursor:pointer}
+  button.secondary{background:var(--secondary)}
+  button.ghost{background:#00000012;color:#111827}
+  select,input[type=file],input[type=range],input[type=text]{font-size:.92rem}
+  .group{display:flex;align-items:center;gap:.35rem;background:#eef2ff;border-radius:10px;padding:.25rem .45rem}
+  .small{font-size:.82rem;opacity:.92}
+  input[type=file]{background:#fff;border-radius:8px;padding:.35rem}
+  .name{border:1px solid #c7d2fe;background:#fff;border-radius:8px;padding:.25rem .5rem;width:9.2rem}
+  .name::placeholder{color:#94a3b8}
+
+  #help{
+    position:absolute;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    left:50%; transform:translateX(-50%);
+    width: min(1100px, calc(100vw - 20px));
+    font-size:.9rem; line-height:1.35;
+    background:#ffffffb0;
+    border-radius:12px;
+    padding:.55rem .75rem;
+    z-index:10;
+    box-shadow:0 6px 18px #00000018;
+    max-height: 28vh;
+    overflow:auto;
+  }
+  kbd{background:#111;color:#fff;border-radius:6px;padding:.08rem .35rem;font-weight:800}
+  .hint{opacity:.82}
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="canvas" aria-label="Pikachu Volleyball Classic"></canvas>
+
+  <div id="hud">
+    <div class="row">
+      <div class="scoreboard">
+        <div class="score"><span id="nm1">P1</span> <span id="s1">0</span> : <span id="s2">0</span> <span id="nm2">P2</span></div>
+        <span class="goal-pill">목표 <span id="goal">15</span>점</span>
+        <span class="goal-pill">세트 <span id="set1">0</span> : <span id="set2">0</span></span>
+      </div>
+      <div class="controls">
+        <button id="btnStart">시작/일시정지</button>
+        <button id="btnRound" class="secondary">라운드 리셋</button>
+        <button id="btnNewGame" class="secondary">새 게임(점수만 0:0)</button>
+        <button id="btnResetSets" class="secondary">세트 리셋</button>
+        <button id="btnMode" class="secondary">모드: 2인용</button>
+        <label class="group small">난이도
+          <select id="difficulty">
+            <option value="easy">쉬움</option>
+            <option value="normal" selected>보통</option>
+            <option value="hard">어려움</option>
+          </select>
+        </label>
+        <button id="btnSound" class="ghost" title="소리 켬/끔">🔊 소리</button>
+        <button id="btnFullscreen" class="ghost" title="전체화면">⛶ 전체화면</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="controls">
+        <div class="group">
+          <label class="small">P1 이름</label><input id="name1" type="text" class="name" placeholder="예: 피카1" maxlength="12">
+        </div>
+        <div class="group">
+          <label class="small">P2 이름</label><input id="name2" type="text" class="name" placeholder="예: 피카2" maxlength="12">
+        </div>
+        <div class="group">
+          <label class="small">P1 PNG</label><input id="p1png" type="file" accept="image/*">
+          <label class="small">크기</label><input id="p1scale" type="range" min="0.6" max="2.4" step="0.05" value="1">
+        </div>
+        <div class="group">
+          <label class="small">P2 PNG</label><input id="p2png" type="file" accept="image/*">
+          <label class="small">크기</label><input id="p2scale" type="range" min="0.6" max="2.4" step="0.05" value="1">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="help">
+    <b>조작</b> — P1: <kbd>A</kbd>/<kbd>D</kbd> 이동, <kbd>W</kbd> 점프, <kbd>S</kbd> 아래(파워 각도), <kbd>F</kbd> 파워히트/다이빙 |
+    P2: <kbd>←</kbd>/<kbd>→</kbd> 이동, <kbd>↑</kbd> 점프, <kbd>↓</kbd> 아래(파워 각도), <kbd>/</kbd> 파워히트/다이빙<br>
+    <b>서브</b> — 공이 <u>서버 머리 위에 고정</u>. 서버가 <kbd>F</kbd>/<kbd>/</kbd>로 쳐서 시작.<br>
+    <span class="hint">※ 브라우저 정책상 소리는 첫 키 입력/버튼 클릭 이후부터 정상 재생됩니다.</span>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ===== 색 =====
+  const css = getComputedStyle(document.documentElement);
+  const COLOR = {
+    bg:    css.getPropertyValue('--bg').trim()    || '#e6f3ff',
+    court: css.getPropertyValue('--court').trim() || '#f3d39a',
+    net:   css.getPropertyValue('--net').trim()   || '#ffffff',
+    pika:  css.getPropertyValue('--pika').trim()  || '#ffd235',
+    cheek: css.getPropertyValue('--cheek').trim() || '#ff5e5e',
+    ear:   css.getPropertyValue('--ear').trim()   || '#2b2b2b',
+  };
+
+  // ===== 내부 월드(원작 좌표계) =====
+  const WORLD = { W: 432, H: 304 };
+  const NET_X = WORLD.W / 2;               // 216
+  const FLOOR_Y = WORLD.H - 32;            // 272
+  const PLAYER_SIZE = 64, PLAYER_HALF = 32;
+  const PLAYER_GROUND_Y = 244;             // 플레이어 중심 y(바닥에 붙은)
+  const BALL_R = 20;
+  const BALL_GROUND_Y = 252;               // 공 중심 y가 252면 바닥 닿음
+
+  // 넷 판정
+  const NET_HALF_W = 25;
+  const NET_TOP_Y = 176;
+  const NET_TOP_BOTTOM_Y = 192;
+
+  // ===== 룰 =====
+  const GOAL = 15;
+  const FIXED_FPS = 60;
+  const FIXED_DT = 1 / FIXED_FPS;
+
+  // ===== (요청) "많이" 느리게 — 속도/중력 자체를 낮춤 =====
+  // 기존 대비 체감 60~70% 수준으로 감속(더 느리게 원하면 아래 숫자만 더 낮추면 됨)
+  const PLAYER_VX = 4.2;     // (기존 6)
+  const DIVE_VX   = 5.2;     // (기존 8)
+  const JUMP_VY   = -13.0;   // (기존 -16)
+  const GRAVITY   = 0.70;    // (기존 1)
+
+  const MIN_UP_VY = -12.5;   // (기존 -15)
+  const POWER_X_BASE = 7.5;  // (기존 10) -> 7.5/15
+  const POWER_FRAMES = 18;
+  const LIE_FRAMES = 22;
+
+  // ===== DOM =====
+  const cv = document.getElementById('canvas');
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const s1El = document.getElementById('s1');
+  const s2El = document.getElementById('s2');
+  const nm1El = document.getElementById('nm1');
+  const nm2El = document.getElementById('nm2');
+  const set1El = document.getElementById('set1');
+  const set2El = document.getElementById('set2');
+  document.getElementById('goal').textContent = GOAL;
+
+  const name1Input = document.getElementById('name1');
+  const name2Input = document.getElementById('name2');
+
+  // ===== 캔버스: 풀뷰포트 + DPR 대응 =====
+  function resize(){
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width  = Math.floor(innerWidth  * dpr);
+    cv.height = Math.floor(innerHeight * dpr);
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.imageSmoothingEnabled = false;
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  function view(){
+    // WORLD를 화면에 최대한 크게(레터박스)
+    const scale = Math.min(cv.width / WORLD.W, cv.height / WORLD.H);
+    const ox = (cv.width  - WORLD.W*scale)/2;
+    const oy = (cv.height - WORLD.H*scale)/2;
+    return {scale, ox, oy};
+  }
+
+  // ===== 유틸 =====
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const randInt=()=>Math.floor(Math.random()*32768);
+
+  function isTypingTarget(el){
+    if(!el) return false;
+    const tag = el.tagName ? el.tagName.toLowerCase() : '';
+    return tag === 'input' || tag === 'textarea' || tag === 'select';
+  }
+
+  // ===== 사운드(WebAudio, 피카/츄/파워히트) =====
+  const audio = {
+    ctx: null,
+    enabled: (localStorage.getItem('pika_sound') ?? '1') === '1',
+  };
+
+  function ensureAudio(){
+    if(audio.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    audio.ctx = new AC();
+  }
+  async function unlockAudio(){
+    ensureAudio();
+    if(audio.ctx && audio.ctx.state === 'suspended'){
+      try { await audio.ctx.resume(); } catch {}
+    }
+  }
+
+  function chirp({f0, f1, dur=0.12, vol=0.18, type='sine'}){
+    if(!audio.enabled) return;
+    if(!audio.ctx) return;
+    const c = audio.ctx;
+    const t0 = c.currentTime;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(Math.max(20,f0), t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20,f1), t0 + dur);
+
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    o.connect(g); g.connect(c.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
+  }
+
+  function noiseBurst({dur=0.06, vol=0.10}){
+    if(!audio.enabled) return;
+    if(!audio.ctx) return;
+    const c = audio.ctx;
+    const t0 = c.currentTime;
+    const sr = c.sampleRate;
+    const len = Math.floor(sr * dur);
+    const buf = c.createBuffer(1, len, sr);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<len;i++) data[i] = (Math.random()*2-1) * (1 - i/len);
+    const src = c.createBufferSource();
+    const g = c.createGain();
+    src.buffer = buf;
+
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    src.connect(g); g.connect(c.destination);
+    src.start(t0);
+    src.stop(t0 + dur + 0.02);
+  }
+
+  function playPika(){ // 낮→중 “피카” 느낌
+    chirp({f0:620, f1:440, dur:0.11, vol:0.18, type:'triangle'});
+    setTimeout(()=>chirp({f0:820, f1:660, dur:0.09, vol:0.14, type:'sine'}), 55);
+  }
+  function playChu(){ // 중→높 “츄” 느낌
+    chirp({f0:760, f1:1040, dur:0.10, vol:0.18, type:'triangle'});
+    setTimeout(()=>chirp({f0:520, f1:680, dur:0.07, vol:0.10, type:'sine'}), 45);
+  }
+  function playPower(){
+    noiseBurst({dur:0.05, vol:0.12});
+    chirp({f0:240, f1:120, dur:0.12, vol:0.22, type:'sawtooth'});
+    setTimeout(()=>chirp({f0:520, f1:380, dur:0.08, vol:0.16, type:'square'}), 30);
+  }
+  function playReadyGo(isGo){
+    if(isGo){
+      chirp({f0:880, f1:1320, dur:0.08, vol:0.14, type:'sine'});
+    }else{
+      chirp({f0:660, f1:520, dur:0.10, vol:0.14, type:'sine'});
+    }
+  }
+  function playScore(){
+    chirp({f0:520, f1:780, dur:0.08, vol:0.12, type:'sine'});
+  }
+
+  function hitVoiceForPlayer(p, isPower){
+    if(isPower) return playPower();
+    // 왼쪽(=P1)은 피카 / 오른쪽(=P2)은 츄 (구분이 직관적)
+    return p.isRight ? playChu() : playPika();
+  }
+
+  const btnSound = document.getElementById('btnSound');
+  function syncSoundBtn(){
+    btnSound.textContent = audio.enabled ? '🔊 소리' : '🔇 무음';
+  }
+  syncSoundBtn();
+  btnSound.onclick = async ()=>{
+    await unlockAudio();
+    audio.enabled = !audio.enabled;
+    localStorage.setItem('pika_sound', audio.enabled ? '1' : '0');
+    syncSoundBtn();
+  };
+
+  // ===== 전체화면 버튼 =====
+  const btnFs = document.getElementById('btnFullscreen');
+  function syncFsBtn(){
+    const on = !!document.fullscreenElement;
+    btnFs.textContent = on ? '⛶ 종료' : '⛶ 전체화면';
+  }
+  syncFsBtn();
+  btnFs.onclick = async ()=>{
+    await unlockAudio();
+    try{
+      if(!document.fullscreenElement){
+        await document.documentElement.requestFullscreen?.();
+      }else{
+        await document.exitFullscreen?.();
+      }
+    }catch{}
+    syncFsBtn();
+  };
+  document.addEventListener('fullscreenchange', syncFsBtn);
+
+  // ===== 스프라이트(캐릭터 교체 유지) =====
+  const sprites = { p1:{img:null,scale:1}, p2:{img:null,scale:1} };
+  document.getElementById('p1png').addEventListener('change', e=>loadPNG('p1',e));
+  document.getElementById('p2png').addEventListener('change', e=>loadPNG('p2',e));
+  document.getElementById('p1scale').addEventListener('input', e=>sprites.p1.scale=+e.target.value);
+  document.getElementById('p2scale').addEventListener('input', e=>sprites.p2.scale=+e.target.value);
+  function loadPNG(which,e){
+    const f=e.target.files?.[0]; if(!f)return;
+    const u=URL.createObjectURL(f);
+    const img=new Image();
+    img.onload=()=>{sprites[which].img=img; URL.revokeObjectURL(u);};
+    img.src=u;
+  }
+
+  // ===== 상태/UI =====
+  const state = {
+    score1:0, score2:0,
+    set1:0, set2:0,
+    server: (Math.random()<0.5?1:2),
+    modeAI:false,
+    difficulty:'normal',
+    running:true,
+    gameOver:false,
+    names:{1:'P1',2:'P2'},
+
+    // Ready/Go 연출
+    roundPhase: 'ready',     // 'ready' -> 'go' -> 'serve' -> 'play'
+    phaseFrames: 0,
+    overlayText: '',
+    overlayTotal: 0,
+
+    // 서브(머리 위 고정)
+    aiServeDelay: 0,
+  };
+
+  function syncScoreUI(){ s1El.textContent = state.score1; s2El.textContent = state.score2; }
+  function syncSetUI(){ set1El.textContent = state.set1; set2El.textContent = state.set2; }
+
+  // 이름 로드/바인딩
+  function loadNames(){
+    const n1 = localStorage.getItem('pika_name1') || 'P1';
+    const n2 = localStorage.getItem('pika_name2') || 'P2';
+    state.names[1]=n1; state.names[2]=n2;
+    name1Input.value=n1; name2Input.value=n2;
+    nm1El.textContent=n1; nm2El.textContent=n2;
+  }
+  loadNames();
+  name1Input.addEventListener('input', ()=>{
+    const v=name1Input.value.trim()||'P1';
+    state.names[1]=v; nm1El.textContent=v; localStorage.setItem('pika_name1',v);
+  });
+  name2Input.addEventListener('input', ()=>{
+    const v=name2Input.value.trim()||'P2';
+    state.names[2]=v; nm2El.textContent=v; localStorage.setItem('pika_name2',v);
+  });
+
+  // ===== 버튼 =====
+  document.getElementById('btnStart').onclick = async ()=>{ await unlockAudio(); state.running=!state.running; };
+  document.getElementById('btnRound').onclick = async ()=>{ await unlockAudio(); if(!state.gameOver) newRound(state.server); };
+  document.getElementById('btnNewGame').onclick = async ()=>{ await unlockAudio(); state.score1=0; state.score2=0; syncScoreUI(); newRound(state.server); };
+  document.getElementById('btnResetSets').onclick = async ()=>{ await unlockAudio(); state.set1=0; state.set2=0; syncSetUI(); };
+  const btnMode = document.getElementById('btnMode');
+  btnMode.onclick = async ()=>{
+    await unlockAudio();
+    state.modeAI = !state.modeAI;
+    btnMode.textContent = state.modeAI ? '모드: 1인용 AI' : '모드: 2인용';
+    newRound(1);
+  };
+  document.getElementById('difficulty').onchange = (e)=> state.difficulty = e.target.value;
+
+  // ===== 입력 =====
+  const keys = new Set();
+  const edge = { p1Atk:false, p2Atk:false };
+
+  addEventListener('keydown', async (e)=>{
+    if(isTypingTarget(e.target)) return;
+    await unlockAudio();
+
+    keys.add(e.key);
+
+    if(!e.repeat){
+      if(e.key==='f' || e.key==='F') edge.p1Atk = true;
+      if(e.key==='/' || e.code==='Slash') edge.p2Atk = true;
+    }
+
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+    if(e.key==='p' || e.key==='P') state.running = !state.running;
+  }, {passive:false});
+
+  addEventListener('keyup', (e)=>{
+    keys.delete(e.key);
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  }, {passive:false});
+
+  function readHumanInput(which){
+    const input = { xDir:0, yDir:0, powerHit:0 };
+
+    if(which===1){
+      const L = keys.has('a')||keys.has('A');
+      const R = keys.has('d')||keys.has('D');
+      const U = keys.has('w')||keys.has('W');
+      const Dn= keys.has('s')||keys.has('S');
+      input.xDir = (L?-1:0) + (R?+1:0);
+      input.yDir = (U?-1:0) + (Dn?+1:0);
+      input.powerHit = edge.p1Atk ? 1 : 0;
+    }else{
+      const L = keys.has('ArrowLeft');
+      const R = keys.has('ArrowRight');
+      const U = keys.has('ArrowUp');
+      const Dn= keys.has('ArrowDown');
+      input.xDir = (L?-1:0) + (R?+1:0);
+      input.yDir = (U?-1:0) + (Dn?+1:0);
+      input.powerHit = edge.p2Atk ? 1 : 0;
+    }
+
+    input.xDir = clamp(input.xDir,-1,1);
+    input.yDir = clamp(input.yDir,-1,1);
+    return input;
+  }
+
+  function readAIInput(){
+    const DIFF = {
+      easy:   { react:0.45, hit:0.55, dive:0.18, boldBonus:0 },
+      normal: { react:0.62, hit:0.78, dive:0.30, boldBonus:1 },
+      hard:   { react:0.78, hit:0.92, dive:0.42, boldBonus:2 },
+    }[state.difficulty];
+
+    const input = { xDir:0, yDir:0, powerHit:0 };
+
+    const leftBoundary  = NET_X + PLAYER_HALF;
+    const rightBoundary = WORLD.W - PLAYER_HALF;
+
+    let targetX = ball.expectedX;
+    if(targetX <= NET_X || targetX >= WORLD.W){
+      targetX = (p2.aiStandBy===0) ? (NET_X + (WORLD.W-NET_X)/2) : (NET_X + 52);
+    }
+
+    const jitter = (randInt()%11 - 5) * (1 - DIFF.react);
+    targetX = clamp(targetX + jitter, leftBoundary, rightBoundary);
+
+    if(Math.abs(targetX - p2.x) > (p2.aiBold + 8 + DIFF.boldBonus)){
+      input.xDir = (p2.x < targetX) ? 1 : -1;
+    }
+
+    if(p2.state === 0){
+      if(
+        Math.abs(ball.vx) < (p2.aiBold + 3 + DIFF.boldBonus) &&
+        Math.abs(ball.x - p2.x) < PLAYER_HALF &&
+        ball.y > -36 && ball.y < (10*p2.aiBold + 84) &&
+        ball.vy > 0
+      ){
+        input.yDir = -1;
+      }
+
+      const inMySide = (ball.expectedX > NET_X && ball.expectedX < WORLD.W);
+      if(
+        inMySide &&
+        Math.abs(ball.x - p2.x) > (p2.aiBold*5 + PLAYER_SIZE) &&
+        ball.x > NET_X && ball.x < WORLD.W &&
+        ball.y > 174 &&
+        (Math.random() < DIFF.dive)
+      ){
+        input.powerHit = 1;
+        input.xDir = (p2.x < ball.x) ? 1 : -1;
+      }
+    } else if(p2.state === 1 || p2.state === 2){
+      if(Math.abs(ball.x - p2.x) > 8){
+        input.xDir = (p2.x < ball.x) ? 1 : -1;
+      }
+
+      if(Math.abs(ball.x - p2.x) < 48 && Math.abs(ball.y - p2.y) < 48){
+        if(Math.random() < DIFF.hit){
+          input.powerHit = 1;
+          input.xDir = 1;
+          const nearNet = (p2.x < NET_X + 80);
+          if(nearNet && ball.y > 140) input.yDir = 1;
+          else input.yDir = 0;
+          if(Math.random() < 0.12*(1-DIFF.react)) input.yDir = -1;
+        }
+      }
+    }
+
+    input.xDir = clamp(input.xDir,-1,1);
+    input.yDir = clamp(input.yDir,-1,1);
+    return input;
+  }
+
+  // ===== 오브젝트 =====
+  function makePlayer(isRight){
+    return {
+      isRight,
+      x: isRight ? (WORLD.W-36) : 36,
+      y: PLAYER_GROUND_Y,
+      yV: 0,
+      state: 0,              // 0 normal, 1 jumping, 2 powerHit, 3 diving, 4 lying
+      diveDir: 0,
+      powerFrames: 0,
+      lieFrames: 0,
+      collisionLock: false,
+      aiBold: 0,
+      aiStandBy: 0,
+    };
+  }
+  function makeBall(){
+    return {
+      x: 56,
+      y: 0,
+      vx: 0,
+      vy: 1,
+      isPower: false,
+      expectedX: 56,
+      trail: [],
+    };
+  }
+
+  const p1 = makePlayer(false);
+  const p2 = makePlayer(true);
+  const ball = makeBall();
+
+  // ===== 물리 =====
+  function calcExpectedLandingX(b){
+    let x=b.x, y=b.y, vx=b.vx, vy=b.vy;
+    let loops=0;
+    while(true){
+      loops++;
+
+      // 벽
+      const fx = x + vx;
+      if(fx < BALL_R) vx = Math.abs(vx);
+      else if(fx > WORLD.W - BALL_R) vx = -Math.abs(vx);
+
+      // 천장
+      if(y + vy < 0) vy = Math.max(1, Math.abs(vy));
+
+      // net
+      if(Math.abs(x - NET_X) < NET_HALF_W && y > NET_TOP_Y){
+        if(y <= NET_TOP_BOTTOM_Y){
+          if(vy > 0) vy = -Math.abs(vy);
+        }else{
+          vx = (x < NET_X) ? -Math.abs(vx) : Math.abs(vx);
+        }
+      }
+
+      const fy = y + vy;
+      if(fy > BALL_GROUND_Y || loops > 1200) break;
+
+      y = fy;
+      x = x + vx;
+      vy = vy + GRAVITY;
+    }
+    return x;
+  }
+
+  function ballWorldStep(b){
+    let changed = false;
+
+    // 벽
+    const fx = b.x + b.vx;
+    if(fx < BALL_R){
+      b.vx = Math.abs(b.vx);
+      changed = true;
+    }else if(fx > WORLD.W - BALL_R){
+      b.vx = -Math.abs(b.vx);
+      changed = true;
+    }
+
+    // 천장
+    if(b.y + b.vy < 0){
+      b.vy = Math.max(1, Math.abs(b.vy));
+      changed = true;
+    }
+
+    // net
+    if(Math.abs(b.x - NET_X) < NET_HALF_W && b.y > NET_TOP_Y){
+      if(b.y <= NET_TOP_BOTTOM_Y){
+        if(b.vy > 0){
+          b.vy = -Math.abs(b.vy);
+          changed = true;
+        }
+      }else{
+        const nvx = (b.x < NET_X) ? -Math.abs(b.vx) : Math.abs(b.vx);
+        if(nvx !== b.vx){ b.vx = nvx; changed = true; }
+      }
+    }
+
+    // 바닥
+    const fy = b.y + b.vy;
+    if(fy > BALL_GROUND_Y){
+      b.y = BALL_GROUND_Y;
+      return { touched:true, changed:true };
+    }
+
+    // 이동
+    b.y = fy;
+    b.x = b.x + b.vx;
+    b.vy = b.vy + GRAVITY;
+
+    return { touched:false, changed };
+  }
+
+  function playerStep(p, input){
+    // 누운 상태
+    if(p.state === 4){
+      p.lieFrames--;
+      if(p.lieFrames <= 0) p.state = 0;
+      return;
+    }
+
+    // 좌우 이동
+    let vX = 0;
+    if(p.state < 3){
+      vX = input.xDir * PLAYER_VX;
+    }else if(p.state === 3){
+      vX = p.diveDir * DIVE_VX;
+    }
+    p.x += vX;
+
+    // 경계
+    if(!p.isRight) p.x = clamp(p.x, PLAYER_HALF, NET_X - PLAYER_HALF);
+    else           p.x = clamp(p.x, NET_X + PLAYER_HALF, WORLD.W - PLAYER_HALF);
+
+    // 점프
+    if(p.state < 3 && input.yDir === -1 && p.y === PLAYER_GROUND_Y){
+      p.yV = JUMP_VY;
+      p.state = 1;
+      p.powerFrames = 0;
+    }
+
+    // 파워히트/다이빙
+    if(input.powerHit === 1){
+      if(p.state === 1){
+        p.state = 2;
+        p.powerFrames = POWER_FRAMES;
+      }else if(p.state === 0 && input.xDir !== 0){
+        p.state = 3;
+        p.diveDir = input.xDir;
+        p.yV = -4.5; // 다이빙 살짝 뜨기(느린 세팅)
+      }
+    }
+
+    // 중력
+    p.y += p.yV;
+    if(p.y < PLAYER_GROUND_Y){
+      p.yV += GRAVITY;
+    }else if(p.y > PLAYER_GROUND_Y){
+      p.y = PLAYER_GROUND_Y;
+      p.yV = 0;
+      if(p.state === 3){
+        p.state = 4;
+        p.lieFrames = LIE_FRAMES;
+      }else{
+        p.state = 0;
+      }
+    }
+
+    if(p.state === 2){
+      p.powerFrames--;
+      if(p.powerFrames <= 0) p.state = 1;
+    }
+  }
+
+  function ballPlayerCollide(b, p, input){
+    const hit = (Math.abs(b.x - p.x) <= PLAYER_HALF) && (Math.abs(b.y - p.y) <= PLAYER_HALF);
+    if(hit){
+      if(!p.collisionLock){
+        // 기본 반사(느리게: /4로 완화)
+        const dx = (b.x - p.x);
+        b.vx = (dx < 0) ? -Math.abs(dx)/4 : Math.abs(dx)/4;
+        if(Math.abs(b.vx) < 0.6) b.vx = (randInt()%3 - 1) * 0.8;
+
+        const absVy = Math.abs(b.vy);
+        b.vy = -absVy;
+        if(absVy < 12) b.vy = MIN_UP_VY;
+
+        // 파워히트
+        const wasPower = (p.state === 2);
+        if(wasPower){
+          const spx = (Math.abs(input.xDir) + 1) * POWER_X_BASE; // 7.5 or 15
+          b.vx = p.isRight ? -spx : spx; // 상대방 쪽으로
+          b.vy = Math.abs(b.vy) * input.yDir * 2; // -: 로브 / 0: 직선 / +: 다운
+          b.isPower = true;
+        }else{
+          b.isPower = false;
+        }
+
+        b.expectedX = calcExpectedLandingX(b);
+
+        // 사운드
+        hitVoiceForPlayer(p, wasPower);
+
+        // 트레일
+        if(b.isPower){
+          b.trail.length = 0;
+          b.trail.push({x:b.x,y:b.y,life:9});
+        }
+
+        p.collisionLock = true;
+      }
+    }else{
+      p.collisionLock = false;
+    }
+  }
+
+  // ===== Ready/Go + 서브 =====
+  function setOverlay(text, frames){
+    state.overlayText = text;
+    state.overlayTotal = frames;
+    state.phaseFrames = frames;
+  }
+
+  function newRound(server){
+    state.server = server;
+    state.gameOver = false;
+
+    Object.assign(p1, makePlayer(false));
+    Object.assign(p2, makePlayer(true));
+    p2.aiBold = (randInt() % 5);
+    p2.aiStandBy = (randInt() % 2);
+
+    Object.assign(ball, makeBall());
+    ball.trail.length = 0;
+    ball.isPower = false;
+
+    // Ready -> Go -> Serve(머리 위 고정)
+    state.roundPhase = 'ready';
+    setOverlay('Ready?', Math.round(FIXED_FPS * 0.75));
+    playReadyGo(false);
+
+    // AI 서브 딜레이(서브가 AI일 때만)
+    state.aiServeDelay = 0;
+  }
+
+  function beginGoPhase(){
+    state.roundPhase = 'go';
+    setOverlay('GO!', Math.round(FIXED_FPS * 0.45));
+    playReadyGo(true);
+  }
+
+  function beginServePhase(){
+    state.roundPhase = 'serve';
+    state.overlayText = '';
+    state.phaseFrames = 0;
+    state.overlayTotal = 0;
+
+    if(state.modeAI && state.server === 2){
+      state.aiServeDelay = 18 + (randInt()%20); // 0.3~0.6s쯤 기다렸다 서브
+    }
+  }
+
+  function serveStep(in1, in2){
+    // 플레이어는 움직일 수 있음
+    playerStep(p1, in1);
+    playerStep(p2, in2);
+
+    // 공: 서버 머리 위 고정
+    const srv = (state.server === 1) ? p1 : p2;
+    ball.x = srv.x;
+    ball.y = srv.y - PLAYER_HALF - BALL_R - 2;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.isPower = false;
+    ball.expectedX = ball.x;
+
+    let srvIn = (state.server === 1) ? in1 : in2;
+
+    // AI 서브 강제
+    if(state.modeAI && state.server === 2){
+      if(state.aiServeDelay > 0) state.aiServeDelay--;
+      else srvIn = {...srvIn, powerHit: 1};
+    }
+
+    // 서버가 공격키로 치면 시작
+    if(srvIn.powerHit === 1){
+      const dir = srv.isRight ? -1 : 1;
+
+      // 서브 속도(느리게): 기본 5.8, 방향키로 약간 가감
+      const base = 5.8 + Math.abs(srvIn.xDir)*1.6; // 5.8 or 7.4
+      ball.vx = dir * base;
+
+      let vy = -9.2;
+      if(srvIn.yDir === 1)  vy = -6.6;  // 아래 누르면 낮게
+      if(srvIn.yDir === -1) vy = -11.0; // 위 누르면 높게
+      ball.vy = vy;
+
+      ball.expectedX = calcExpectedLandingX(ball);
+      hitVoiceForPlayer(srv, false);
+
+      state.roundPhase = 'play';
+    }
+  }
+
+  // ===== 득점 =====
+  function pointTo(who){
+    if(who===1) state.score1++; else state.score2++;
+    syncScoreUI();
+
+    playScore();
+
+    if(state.score1>=GOAL || state.score2>=GOAL){
+      if(state.score1 > state.score2){
+        state.set1++; syncSetUI();
+        state.score1=0; state.score2=0; syncScoreUI();
+        newRound(1);
+      }else{
+        state.set2++; syncSetUI();
+        state.score1=0; state.score2=0; syncScoreUI();
+        newRound(2);
+      }
+      return;
+    }
+    newRound(who);
+  }
+
+  // ===== 렌더 =====
+  function circle(x,y,r){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
+  function roundRect(x,y,w,h,r,fill){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    if(fill) ctx.fill(); else ctx.stroke();
+  }
+
+  function drawCourtWorld(){
+    ctx.fillStyle = COLOR.court;
+    ctx.fillRect(0, FLOOR_Y, WORLD.W, WORLD.H - FLOOR_Y);
+
+    ctx.globalAlpha = 0.20;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0.5, 0.5, WORLD.W-1, WORLD.H-1);
+    ctx.globalAlpha = 1;
+
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(NET_X-1, FLOOR_Y-5, 2, 6);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = COLOR.net;
+    ctx.fillRect(NET_X - NET_HALF_W, NET_TOP_Y, NET_HALF_W*2, FLOOR_Y - NET_TOP_Y);
+
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = COLOR.net;
+    for(let y=NET_TOP_Y+10; y<FLOOR_Y; y+=12){
+      ctx.fillRect(NET_X - 60, y, 120, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(NET_X - NET_HALF_W, NET_TOP_Y, NET_HALF_W*2, 2);
+    ctx.fillRect(NET_X - NET_HALF_W, NET_TOP_BOTTOM_Y, NET_HALF_W*2, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawDefaultPika(p, facing){
+    const x = p.x - PLAYER_HALF;
+    const y = p.y - PLAYER_HALF;
+
+    ctx.fillStyle = COLOR.pika;
+    roundRect(x+6, y+10, PLAYER_SIZE-12, PLAYER_SIZE-12, 14, true);
+
+    const eW=10, eH=22;
+    ctx.fillStyle = COLOR.pika;
+    ctx.fillRect(x+10, y-2, eW, eH);
+    ctx.fillRect(x+PLAYER_SIZE-10-eW, y-2, eW, eH);
+    ctx.fillStyle = COLOR.ear;
+    ctx.fillRect(x+10, y-2, eW, 8);
+    ctx.fillRect(x+PLAYER_SIZE-10-eW, y-2, eW, 8);
+
+    const ex1 = facing>0 ? x+PLAYER_SIZE-18 : x+18;
+    const ex2 = facing>0 ? x+PLAYER_SIZE-32 : x+32;
+    const ey = y+28;
+    ctx.fillStyle = '#000';
+    circle(ex1, ey, 3.2);
+    circle(ex2, ey, 3.2);
+
+    ctx.fillStyle = COLOR.cheek;
+    const cy = y+40;
+    const cx1 = facing>0 ? x+PLAYER_SIZE-14 : x+14;
+    const cx2 = facing>0 ? x+PLAYER_SIZE-50 : x+50;
+    circle(cx1, cy, 5.2);
+    circle(cx2, cy, 5.2);
+
+    if(p.state===2){
+      ctx.globalAlpha = 0.30;
+      ctx.fillStyle = '#ff0000';
+      circle(p.x, p.y-10, 10);
+      ctx.globalAlpha = 1;
+    } else if(p.state===3 || p.state===4){
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x+8, y+PLAYER_SIZE-10, PLAYER_SIZE-16, 4);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawPlayerWorld(p, which){
+    const spr = sprites[which];
+    const facing = p.isRight ? -1 : 1;
+
+    if(spr.img){
+      const s = spr.scale || 1;
+      const w = PLAYER_SIZE * s;
+      const h = PLAYER_SIZE * s;
+      const bottomY = p.y + PLAYER_HALF;
+      const dx = p.x - w/2;
+      const dy = bottomY - h;
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      if(facing < 0){
+        ctx.translate(p.x, dy + h/2);
+        ctx.scale(-1, 1);
+        ctx.drawImage(spr.img, -w/2, -h/2, w, h);
+      }else{
+        ctx.drawImage(spr.img, dx, dy, w, h);
+      }
+      ctx.restore();
+    }else{
+      drawDefaultPika(p, facing);
+    }
+  }
+
+  function drawBallWorld(){
+    // 트레일
+    if(ball.trail.length){
+      ctx.save();
+      ctx.fillStyle = '#fff';
+      for(const tr of ball.trail){
+        const a = tr.life / 9;
+        ctx.globalAlpha = 0.06 + 0.22*a;
+        circle(tr.x, tr.y, BALL_R * (0.65 + 0.35*a));
+      }
+      ctx.restore();
+    }
+
+    const g = ctx.createRadialGradient(ball.x-6, ball.y-8, 4, ball.x, ball.y, BALL_R+6);
+    g.addColorStop(0,'#fff');
+    g.addColorStop(1,'#fef08a');
+    ctx.fillStyle = g;
+    circle(ball.x, ball.y, BALL_R);
+
+    ctx.strokeStyle = '#d4a373';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, BALL_R*0.78, 0, Math.PI*2);
+    ctx.stroke();
+
+    if(ball.isPower){
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, BALL_R+4, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawOverlayText(){
+    if(!state.overlayText) return;
+
+    const prog = state.overlayTotal ? (1 - state.phaseFrames / state.overlayTotal) : 0;
+    const pop = 1 + 0.10 * Math.sin(Math.min(1, prog) * Math.PI);
+    const alpha = 0.25 + 0.75 * (1 - Math.min(1, prog)*0.75);
+
+    ctx.save();
+    ctx.fillStyle = '#00000055';
+    ctx.fillRect(0,0,cv.width,cv.height);
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${Math.floor(76*pop)}px system-ui,sans-serif`;
+    ctx.shadowColor = '#00000088';
+    ctx.shadowBlur = 10;
+    ctx.fillText(state.overlayText, cv.width/2, cv.height/2);
+    ctx.restore();
+  }
+
+  function drawPause(){
+    ctx.save();
+    ctx.fillStyle='#00000066';
+    ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.fillStyle='#fff';
+    ctx.font='900 34px system-ui,sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText('일시정지 (버튼 또는 P)', cv.width/2, cv.height/2);
+    ctx.restore();
+  }
+
+  function draw(){
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle = COLOR.bg;
+    ctx.fillRect(0,0,cv.width,cv.height);
+
+    const v = view();
+    ctx.save();
+    ctx.setTransform(v.scale, 0, 0, v.scale, v.ox, v.oy);
+
+    drawCourtWorld();
+    drawPlayerWorld(p1,'p1');
+    drawPlayerWorld(p2,'p2');
+    drawBallWorld();
+
+    ctx.restore();
+
+    drawOverlayText();
+    if(!state.running || state.gameOver) drawPause();
+  }
+
+  // ===== 메인 루프 =====
+  let last = performance.now();
+  let acc = 0;
+
+  function loop(t){
+    const dt = Math.min(0.05, (t-last)/1000);
+    last = t;
+
+    if(state.running && !state.gameOver){
+      acc += dt;
+      while(acc >= FIXED_DT){
+        // Ready/Go 단계: 물리 업데이트 없이 카운트만
+        if(state.roundPhase === 'ready' || state.roundPhase === 'go'){
+          state.phaseFrames--;
+          if(state.phaseFrames <= 0){
+            if(state.roundPhase === 'ready') beginGoPhase();
+            else beginServePhase();
+          }
+        } else {
+          // 입력
+          const in1 = readHumanInput(1);
+          let in2 = state.modeAI ? readAIInput() : readHumanInput(2);
+
+          // 단계별 진행
+          if(state.roundPhase === 'serve'){
+            serveStep(in1, in2);
+          } else if(state.roundPhase === 'play'){
+            const stepRes = ballWorldStep(ball);
+
+            // 트레일 수명
+            if(ball.trail.length){
+              for(const tr of ball.trail) tr.life--;
+              ball.trail = ball.trail.filter(tr=>tr.life>0);
+              if(ball.isPower){
+                ball.trail.push({x:ball.x,y:ball.y,life:9});
+                if(ball.trail.length>12) ball.trail.shift();
+              }
+            }
+
+            // 벽/넷/천장 등으로 속도 바뀌면 예측 갱신
+            if(stepRes.changed) ball.expectedX = calcExpectedLandingX(ball);
+
+            // 플레이어/충돌
+            playerStep(p1, in1);
+            playerStep(p2, in2);
+
+            ballPlayerCollide(ball, p1, in1);
+            ballPlayerCollide(ball, p2, in2);
+
+            // 바닥 닿으면 득점
+            if(stepRes.touched){
+              const leftSide = (ball.x < NET_X);
+              pointTo(leftSide ? 2 : 1);
+              // 라운드가 새로 시작되므로 누적 스텝 중단
+              break;
+            }
+          }
+
+          // 엣지 소비
+          edge.p1Atk = false;
+          edge.p2Atk = false;
+        }
+
+        acc -= FIXED_DT;
+      }
+    } else {
+      edge.p1Atk = false;
+      edge.p2Atk = false;
+    }
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ===== 시작 =====
+  syncScoreUI(); syncSetUI();
+  newRound(state.server);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
